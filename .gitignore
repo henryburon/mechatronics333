@@ -4,3 +4,4 @@ Makefile
 *.elf
 *.hex
 *.map
+*.vscode/
