@@ -16,6 +16,8 @@ static volatile float Ki = 0;
 
 // Function prototypes
 void makeWaveform();
+unsigned int adc_sample_convert(int pin);
+
 
 // Interrupts
 void __ISR(_TIMER_2_VECTOR, IPL5SOFT) Controller(void) { // call with Timer2 @ 1 kHz
@@ -26,6 +28,11 @@ void __ISR(_TIMER_2_VECTOR, IPL5SOFT) Controller(void) { // call with Timer2 @ 1
 
   // set OC1RS (the duty cycle)
   OC1RS = Waveform[counter];
+
+  // read the ADC value
+
+  adcval = adc_sample_convert(0);  // sample and convert pin 0
+
 
   if (StoringData) {
     decctr++;
@@ -87,6 +94,9 @@ int main(void) {
   IFS0bits.T2IF = 0; // clear the timer2 interrupt flag
   __builtin_enable_interrupts(); // re-enable interrupts
 
+  // Enable/Set up ADC
+  AD1CON1bits.ON = 1; // turn on A/D converter. Different than book code. Seems that this version of PIC32 does not need as much setup.
+
   // continue forever
   while(1) {
     
@@ -120,4 +130,21 @@ void makeWaveform() {
       Waveform[i] = center - A;
     }
   }   
+}
+
+unsigned int adc_sample_convert(int pin) { // pin refers to ANx pin... i.e. AN0 is 0, AN1 is 1, etc.
+  unsigned int elapsed = 0;
+  unsigned int finish_time = 0;
+  AD1CHSbits.CH0SA = pin;  // connect chosen pin to MUXA for sampling
+  AD1CON1bits.SAMP = 1;  // START sampling
+
+  elapsed = _CP0_GET_COUNT();
+  finish_time = elapsed + 10;
+  while (_CP0_GET_COUNT() < finish_time) { ; }  // sample for more than 250 ns
+
+  AD1CON1bits.SAMP = 0;  // STOP sampling and START converting
+
+  while (!AD1CON1bits.DONE) { ; }  // wait for the conversion process to finish
+
+  return ADC1BUF0;  // read the buffer with the result
 }

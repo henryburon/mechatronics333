@@ -4,32 +4,48 @@ import matplotlib.pyplot as plt
 port = '/dev/ttyUSB0'  # Use the correct port for your setup
 baud_rate = 230400  # Set the baud rate to match your microcontroller's configuration
 
+# Initialize lists to store x, y1 and y2 coordinates
+x_coords = []
+y1_coords = []
+y2_coords = []
+
 try:
-    with serial.Serial(port, baud_rate, timeout=None) as mySerial:  # timeout=None makes read block until data is received
+    # Open the serial port with the specified baud rate
+    with serial.Serial(port, baud_rate, timeout=1) as mySerial:
         print(f"Opened port {port} for reading...")
+        
+        # Continuously read data from the serial port
+        while len(x_coords) < 200:
+            if mySerial.in_waiting > 0:
+                data_read = mySerial.readline().decode('utf-8').rstrip()
+                print(f"Data read: {data_read}")
 
-        # Wait for data to be received
-        print("Waiting for data...")
-        while mySerial.in_waiting == 0:
-            pass  # Do nothing, just wait until data is available
+                # Parse the incoming data as coordinates
+                x, y1, y2 = map(float, data_read.split())  # Assumes data is in "x y1 y2" format
 
-        # Read one set of data from the serial port
-        data_read = mySerial.readline().decode('utf-8').rstrip()
-        print(f"Data read: {data_read}")
+                # Add the new coordinates to the lists
+                x_coords.append(x)
+                y1_coords.append(y1)
+                y2_coords.append(y2)
 
-        # Parse the incoming data as coordinates
-        x, y = map(int, data_read.split(','))  # Assumes data is in "x,y" format
+    # Plot the data
+                
 
-        # Plot the data using matplotlib
-        plt.plot(x, y, 'ro')  # Plot the point as a red circle
-        plt.xlabel('X axis')
-        plt.ylabel('Y axis')
-        plt.title('Plotting a Single Data Point')
-        plt.show()
+    print(x_coords)
+    print(y1_coords)
+    print(y2_coords)
+
+    plt.figure()
+    plt.plot(x_coords, y1_coords, label='ADC Value')
+    plt.plot(x_coords, y2_coords, label='Reference')
+    plt.xlabel('Sample Number (at 100 Hz)')
+    plt.ylabel('Brightness (ADC counts)')
+    plt.title('Brightness vs. Sample Number')
+    plt.legend()
+    plt.show()
 
 except serial.SerialException as e:
     print(f"Error opening serial port: {e}")
+
 except KeyboardInterrupt:
     print("Program terminated by user")
-except ValueError:
-    print("Received data in an unexpected format. Make sure the data is two integers separated by a comma.")
