@@ -30,7 +30,6 @@ try:
 
     # Plot the data
                 
-
     print(x_coords)
     print(y1_coords)
     print(y2_coords)

@@ -9,15 +9,16 @@ static volatile int Waveform[NUMSAMPS];  // waveform
 static volatile int ADCarray[PLOTPTS];  // measured values to plot
 static volatile int REFarray[PLOTPTS];  // reference values to plot
 static volatile int StoringData = 0;    // if this flag = 1, currently storing plot data
+static volatile int Eint = 0; 
 
 // Controller gains
-static volatile float Kp = 0;
-static volatile float Ki = 0;
+
+static volatile float Kp = 0.1;
+static volatile float Ki = 0.08;
 
 // Function prototypes
 void makeWaveform();
 unsigned int adc_sample_convert(int pin);
-
 
 // Interrupts
 void __ISR(_TIMER_2_VECTOR, IPL5SOFT) Controller(void) { // call with Timer2 @ 1 kHz
@@ -25,14 +26,15 @@ void __ISR(_TIMER_2_VECTOR, IPL5SOFT) Controller(void) { // call with Timer2 @ 1
   static int plotind = 0;  // index for data arrays: counts up to PLOTPTS
   static int decctr = 0;   // counts to store data once every DECIMATION
   static int adcval = 0;   // ADC value
+  static int error = 0; // error
+  float u = 0; // control input
+  float unew = 0; // new control input
 
   // set OC1RS (the duty cycle)
   OC1RS = Waveform[counter];
 
   // read the ADC value
-
   adcval = adc_sample_convert(0);  // sample and convert pin 0
-
 
   if (StoringData) {
     decctr++;
@@ -54,6 +56,24 @@ void __ISR(_TIMER_2_VECTOR, IPL5SOFT) Controller(void) { // call with Timer2 @ 1
   }
   // clear interrupt flag so it can be triggered again
   IFS0bits.T2IF = 0; // clear flag on T2 interrupt
+
+  error = Waveform[counter] - adcval; // reference minus sensed
+  Eint = Eint + error; // update integral error
+  u = Kp*error + Ki*Eint; // control input
+
+  unew = u + 50.0;
+  if (unew > 100.0) {
+    unew = 100.0;
+  } else if (unew < 0.0) {
+    unew = 0.0;
+  }
+
+  // set OC1RS (the duty cycle)
+  OC1RS = (unsigned int) ((unew/100.0) * PR3);
+
+
+
+
 }
 
 
@@ -122,7 +142,10 @@ int main(void) {
 // Functions
 
 void makeWaveform() {
-  int i = 0, center = (PR3+1)/2, A = (PR3+1)/4; // square wave, center should be 50% of PR3, A should be 25% so it alternates between 25% and 75%
+  // int i = 0, center = (PR3+1)/2, A = (PR3+1)/4; // square wave, center should be 50% of PR3, A should be 25% so it alternates between 25% and 75%
+  int i = 0;
+  int center = 500;
+  int A = 300;
   for (i = 0; i < NUMSAMPS; ++i) {
     if ( i < NUMSAMPS/2) {
       Waveform[i] = center + A;
