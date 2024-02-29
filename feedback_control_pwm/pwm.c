@@ -2,7 +2,17 @@
 
 
 #define NUMSAMPS 1000  // number of points in waveform
+#define PLOTPTS 200  // number of data points to plot
+#define DECIMATION 10  // plot every 10th point
+
 static volatile int Waveform[NUMSAMPS];  // waveform
+static volatile int ADCarray[PLOTPTS];  // measured values to plot
+static volatile int REFarray[PLOTPTS];  // reference values to plot
+static volatile int StoringData = 0;    // if this flag = 1, currently storing plot data
+
+// Controller gains
+static volatile float Kp = 0;
+static volatile float Ki = 0;
 
 // Function prototypes
 void makeWaveform();
@@ -10,18 +20,33 @@ void makeWaveform();
 // Interrupts
 void __ISR(_TIMER_2_VECTOR, IPL5SOFT) Controller(void) { // call with Timer2 @ 1 kHz
   static int counter = 0;  // initialize counter once
+  static int plotind = 0;  // index for data arrays: counts up to PLOTPTS
+  static int decctr = 0;   // counts to store data once every DECIMATION
+  static int adcval = 0;   // ADC value
 
   // set OC1RS (the duty cycle)
   OC1RS = Waveform[counter];
+
+  if (StoringData) {
+    decctr++;
+    if (decctr == DECIMATION) {   // after DECIMATION control loops,
+      decctr = 0;                // reset the decimation counter
+      ADCarray[plotind] = adcval;  // store data in global arrays
+      REFarray[plotind] = Waveform[counter];
+      plotind++;                   // increment the plot index
+    }
+    if (plotind == PLOTPTS) {      // if max number of plot points plot is reached
+      plotind = 0;                // reset the plot index
+      StoringData = 0;             // tell main that data is ready to be sent
+    }
+  }
 
   counter++;  // add one to counter every timer ISR is entered
   if (counter == NUMSAMPS) {
     counter = 0;  //  roll the counter over when needed
   }
-
   // clear interrupt flag so it can be triggered again
   IFS0bits.T2IF = 0; // clear flag on T2 interrupt
-
 }
 
 
@@ -29,7 +54,11 @@ int main(void) {
 
   NU32DIP_Startup();          // cache on, interrupts on, LED/button init, UART init
 
+  char message[100];  // message to and from Python
+  int i = 0; // plot data loop counter
+
   // Enable Timer3 with a frequency of 20 kHz, and set up OC1
+
   T3CONbits.TCKPS = 0b000;  // set prescaler (N) on Timer3 to N=1 (1:1). Prescaler divides the incoming clock before incrementing the timer
   PR3 = 2399;               // period = (PR3 + 1) * N * (1/48,000,000) = 0.0005s, 50 us, 20 kHz
   TMR3 = 0;                 // initial timer3 count is 0
@@ -60,9 +89,23 @@ int main(void) {
 
   // continue forever
   while(1) {
-    ;
+    
+    StoringData = 1; // message to ISR to start storing data
+
+    while (StoringData) {
+      ; // wait until ISR says data storing is done. The ISR will change StoringData to 0 when it is done storing data
     }
 
+    for (i=0; i<PLOTPTS; i++) {
+
+      sprintf(message, "%d %d %d\r\n", PLOTPTS-i, ADCarray[i], REFarray[i]);
+      NU32DIP_WriteUART1(message);
+    }
+
+
+
+
+    }
   return 0;
 }
 
